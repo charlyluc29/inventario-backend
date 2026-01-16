@@ -22,6 +22,15 @@ router.get(
   inventarioController.obtenerMovimientos
 );
 
+// Eliminar producto SOLO de una sucursal (inventario)
+router.delete(
+  "/item/:id",
+  verificarToken,
+  soloAdmin,
+  inventarioController.eliminarInventario
+);
+
+
 // Inventario por sucursal
 router.get(
   "/:id",
