@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const Usuario = require("./models/Usuario");
 
 mongoose.connect(
-  'mongodb+srv://admin:root@cluster0.erza3jx.mongodb.net/inventario?retryWrites=true&w=majority'
+  'mongodb+srv://mandalagroup9493_db_user:TbPXT75t2pmrQB6A@cluster0.vxf0ax2.mongodb.net/inventario?retryWrites=true&w=majority&appName=Cluster0'
 )
 .then(async () => {
   console.log("MongoDB conectado ✅");
@@ -28,3 +28,9 @@ mongoose.connect(
 .catch(err => {
   console.log("Error al conectar a MongoDB:", err);
 });
+const bcrypt = require("bcrypt");
+
+(async () => {
+  const hash = await bcrypt.hash("Mand23#4", 10);
+  console.log(hash);
+})();
