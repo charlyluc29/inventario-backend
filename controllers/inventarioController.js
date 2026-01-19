@@ -263,23 +263,55 @@ exports.transferirProductosLote = async (req, res) => {
 };
 
 // ==============================
-// Crear producto + inventario
+// Crear producto + inventario (SOLO ADMIN)
 // ==============================
 exports.crearProductoConInventario = async (req, res) => {
   try {
-    const { nombre, codigo, sucursal, cantidad } = req.body;
-
-    const producto = await Producto.create({
+    const {
+      codigo,
       nombre,
-      codigo
+      caracteristicas,
+      modelo,
+      estado,
+      precio,
+      sucursal,
+      cantidad
+    } = req.body;
+
+    // Validación básica
+    if (
+      !codigo ||
+      !nombre ||
+      !caracteristicas ||
+      !modelo ||
+      !estado ||
+      precio == null ||
+      !sucursal ||
+      !cantidad
+    ) {
+      return res.status(400).json({
+        error: "Faltan campos obligatorios"
+      });
+    }
+
+    // Crear producto
+    const producto = await Producto.create({
+      codigo,
+      nombre,
+      caracteristicas,
+      modelo,
+      estado,
+      precio
     });
 
+    // Crear inventario
     const inventario = await Inventario.create({
       producto: producto._id,
       sucursal,
       cantidad
     });
 
+    // Movimiento
     await Movimiento.create({
       tipo: "entrada",
       producto: producto._id,
@@ -288,12 +320,14 @@ exports.crearProductoConInventario = async (req, res) => {
       usuario: req.usuario.id
     });
 
-    res.json({
+    res.status(201).json({
       mensaje: "Producto creado e inventario registrado",
       producto,
       inventario
     });
+
   } catch (err) {
+    console.error("Error crearProductoConInventario:", err);
     res.status(500).json({ error: err.message });
   }
 };
