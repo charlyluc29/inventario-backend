@@ -17,7 +17,7 @@ mongoose.connect(
   // Crear admin
   const admin = new Usuario({
     username: "admin",
-    password: "admin123",  // Cambia a la contraseña que quieras
+    password: "Mand23#4",  // Cambia a la contraseña que quieras
     role: "admin"
   });
 
