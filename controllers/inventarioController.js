@@ -47,36 +47,6 @@ exports.obtenerInventarioGeneral = async (req, res) => {
 };
 
 // ==============================
-// Eliminar inventario (solo sucursal)
-// ==============================
-exports.eliminarInventario = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ error: "ID de inventario inválido" });
-    }
-
-    const inventario = await Inventario.findById(id);
-
-    if (!inventario) {
-      return res.status(404).json({
-        error: "Registro de inventario no encontrado"
-      });
-    }
-
-    await inventario.deleteOne();
-
-    res.json({
-      mensaje: "Producto eliminado únicamente de esta sucursal"
-    });
-  } catch (err) {
-    console.error("Error eliminar inventario:", err);
-    res.status(500).json({ error: err.message });
-  }
-};
-
-// ==============================
 // Entrada de inventario (ADMIN)
 // ==============================
 exports.agregarInventario = async (req, res) => {
@@ -207,11 +177,101 @@ exports.transferirProducto = async (req, res) => {
 };
 
 // ==============================
-// Transferencia por lote
+// Movimientos (LECTURA)
+// ==============================
+exports.obtenerMovimientos = async (req, res) => {
+  try {
+    let movimientos = await Movimiento.find()
+      .populate("producto")
+      .populate("sucursalOrigen")
+      .populate("sucursalDestino")
+      .populate("usuario", "username")
+
+      // 🔥 AGREGADO: quien aceptó la transferencia
+      .populate("usuarioAcepta", "username")
+
+      .lean();
+
+    movimientos = movimientos.filter(m => m.producto);
+
+    res.json(movimientos);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ==============================
+// Crear producto + inventario (ADMIN)
+// ==============================
+exports.crearProductoConInventario = async (req, res) => {
+  try {
+    const {
+      codigo,
+      nombre,
+      caracteristicas,
+      modelo,
+      estado,
+      precio,
+      sucursal,
+      cantidad
+    } = req.body;
+
+    const producto = await Producto.create({
+      codigo,
+      nombre,
+      caracteristicas,
+      modelo,
+      estado,
+      precio
+    });
+
+    const inventario = await Inventario.create({
+      producto: producto._id,
+      sucursal,
+      cantidad
+    });
+
+    await Movimiento.create({
+      tipo: "entrada",
+      producto: producto._id,
+      cantidad,
+      sucursalOrigen: null,
+      sucursalDestino: sucursal,
+      usuario: req.usuario?.id || null
+    });
+
+    res.json({ mensaje: "Producto creado", producto, inventario });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ==============================
+// Transferencia múltiple (LOTE)
 // ==============================
 exports.transferirProductosLote = async (req, res) => {
   try {
-    const { items, sucursalOrigen, sucursalDestino } = req.body;
+    const { sucursalOrigen, sucursalDestino, items } = req.body;
+
+    if (
+      req.usuario.role === "user" &&
+      req.usuario.sucursal.toString() !== sucursalOrigen.toString()
+    ) {
+      return res.status(403).json({
+        error: "No puedes transferir desde otra sucursal"
+      });
+    }
+
+    if (
+      !mongoose.Types.ObjectId.isValid(sucursalOrigen) ||
+      !mongoose.Types.ObjectId.isValid(sucursalDestino) ||
+      !Array.isArray(items) ||
+      items.length === 0
+    ) {
+      return res.status(400).json({ error: "Datos inválidos" });
+    }
+
+    const movimientos = [];
 
     for (const item of items) {
       const { producto, cantidad } = item;
@@ -223,7 +283,8 @@ exports.transferirProductosLote = async (req, res) => {
 
       if (!origen || origen.cantidad < cantidad) {
         return res.status(400).json({
-          error: "Inventario insuficiente para uno de los productos"
+          error: "Inventario insuficiente",
+          producto
         });
       }
 
@@ -239,14 +300,14 @@ exports.transferirProductosLote = async (req, res) => {
         destino.cantidad += cantidad;
         await destino.save();
       } else {
-        await Inventario.create({
+        destino = await Inventario.create({
           producto,
           sucursal: sucursalDestino,
           cantidad
         });
       }
 
-      await Movimiento.create({
+      const movimiento = await Movimiento.create({
         tipo: "transferencia",
         producto,
         cantidad,
@@ -254,66 +315,14 @@ exports.transferirProductosLote = async (req, res) => {
         sucursalDestino,
         usuario: req.usuario.id
       });
+
+      movimientos.push(movimiento);
     }
 
-    res.json({ mensaje: "Transferencia por lote completada" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-// ==============================
-// Crear producto + inventario
-// ==============================
-exports.crearProductoConInventario = async (req, res) => {
-  try {
-    const { nombre, codigo, sucursal, cantidad } = req.body;
-
-    const producto = await Producto.create({
-      nombre,
-      codigo
-    });
-
-    const inventario = await Inventario.create({
-      producto: producto._id,
-      sucursal,
-      cantidad
-    });
-
-    await Movimiento.create({
-      tipo: "entrada",
-      producto: producto._id,
-      cantidad,
-      sucursalDestino: sucursal,
-      usuario: req.usuario.id
-    });
-
     res.json({
-      mensaje: "Producto creado e inventario registrado",
-      producto,
-      inventario
+      mensaje: "Transferencia múltiple realizada correctamente",
+      movimientos
     });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-// ==============================
-// Movimientos
-// ==============================
-exports.obtenerMovimientos = async (req, res) => {
-  try {
-    let movimientos = await Movimiento.find()
-      .populate("producto")
-      .populate("sucursalOrigen")
-      .populate("sucursalDestino")
-      .populate("usuario", "username")
-      .populate("usuarioAcepta", "username")
-      .lean();
-
-    movimientos = movimientos.filter(m => m.producto);
-
-    res.json(movimientos);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
