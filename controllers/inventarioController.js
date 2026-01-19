@@ -71,6 +71,7 @@ exports.eliminarInventario = async (req, res) => {
       mensaje: "Producto eliminado únicamente de esta sucursal"
     });
   } catch (err) {
+    console.error("Error eliminar inventario:", err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -262,41 +263,15 @@ exports.transferirProductosLote = async (req, res) => {
 };
 
 // ==============================
-// ✅ Crear producto + inventario (CORREGIDO)
+// Crear producto + inventario
 // ==============================
 exports.crearProductoConInventario = async (req, res) => {
   try {
-    const {
-      codigo,
-      nombre,
-      caracteristicas,
-      modelo,
-      estado,
-      precio,
-      sucursal,
-      cantidad
-    } = req.body;
-
-    if (
-      !codigo ||
-      !nombre ||
-      !caracteristicas ||
-      !modelo ||
-      !estado ||
-      precio === undefined
-    ) {
-      return res.status(400).json({
-        error: "Faltan campos obligatorios del producto"
-      });
-    }
+    const { nombre, codigo, sucursal, cantidad } = req.body;
 
     const producto = await Producto.create({
-      codigo,
       nombre,
-      caracteristicas,
-      modelo,
-      estado,
-      precio
+      codigo
     });
 
     const inventario = await Inventario.create({
@@ -309,12 +284,11 @@ exports.crearProductoConInventario = async (req, res) => {
       tipo: "entrada",
       producto: producto._id,
       cantidad,
-      sucursalOrigen: null,
       sucursalDestino: sucursal,
-      usuario: req.usuario?.id || null
+      usuario: req.usuario.id
     });
 
-    res.status(201).json({
+    res.json({
       mensaje: "Producto creado e inventario registrado",
       producto,
       inventario
