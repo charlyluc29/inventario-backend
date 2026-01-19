@@ -28,9 +28,5 @@ mongoose.connect(
 .catch(err => {
   console.log("Error al conectar a MongoDB:", err);
 });
-const bcrypt = require("bcrypt");
 
-(async () => {
-  const hash = await bcrypt.hash("Mand23#4", 10);
-  console.log(hash);
-})();
+
