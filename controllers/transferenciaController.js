@@ -1,19 +1,17 @@
-const mongoose = require("mongoose");
 const Transferencia = require("../models/Transferencia");
 const Inventario = require("../models/Inventario");
 const Movimiento = require("../models/Movimiento");
 
 // ==============================
-// Crear transferencia (USER / ADMIN)
+// Crear transferencia
 // ==============================
 exports.crearTransferencia = async (req, res) => {
   try {
     const esAdmin = req.usuario.role === "admin";
 
-    // Solo usuarios normales necesitan sucursal
     if (!esAdmin && !req.usuario?.sucursal) {
       return res.status(400).json({
-        error: "Usuario sin sucursal asignada"
+        error: "Usuario sin sucursal asignada",
       });
     }
 
@@ -21,27 +19,25 @@ exports.crearTransferencia = async (req, res) => {
 
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
-        error: "La transferencia debe contener al menos un producto"
+        error: "Debe contener al menos un producto",
       });
     }
 
-    // Determinar sucursal origen
     const sucursalOrigen = esAdmin
-      ? null // Admin puede enviar desde cualquier sucursal si lo decides
+      ? null
       : req.usuario.sucursal._id || req.usuario.sucursal;
 
-    // Validar stock (solo si no es admin o si eliges bloquear)
-    for (const item of items) {
-      if (!esAdmin) {
+    // Validar stock
+    if (!esAdmin) {
+      for (const item of items) {
         const inv = await Inventario.findOne({
           producto: item.producto,
-          sucursal: sucursalOrigen
+          sucursal: sucursalOrigen,
         });
 
         if (!inv || inv.cantidad < item.cantidad) {
           return res.status(400).json({
             error: "Inventario insuficiente",
-            producto: item.producto
           });
         }
       }
@@ -52,7 +48,7 @@ exports.crearTransferencia = async (req, res) => {
       sucursalDestino,
       items,
       usuarioOrigen: req.usuario._id,
-      estado: "pendiente"
+      estado: "pendiente",
     });
 
     res.status(201).json(transferencia);
@@ -62,28 +58,32 @@ exports.crearTransferencia = async (req, res) => {
 };
 
 // ==============================
-// Transferencias ENTRANTES
+// Transferencias entrantes
 // ==============================
 exports.transferenciasEntrantes = async (req, res) => {
   try {
     const filtro = {};
 
-    // Solo filtrar por sucursal si NO es admin
     if (req.usuario.role !== "admin") {
-      const sucursalId = req.usuario.sucursal?._id || req.usuario.sucursal;
+      const sucursalId =
+        req.usuario.sucursal?._id || req.usuario.sucursal;
+
       if (!sucursalId) {
-        return res.status(400).json({ error: "Usuario sin sucursal asignada" });
+        return res
+          .status(400)
+          .json({ error: "Usuario sin sucursal" });
       }
+
       filtro.sucursalDestino = sucursalId;
     }
 
-    // Filtrar por estado si viene en query
     if (req.query.estado) {
       filtro.estado = req.query.estado;
     }
 
     const data = await Transferencia.find(filtro)
       .populate("sucursalOrigen")
+      .populate("sucursalDestino")
       .populate("usuarioOrigen", "username")
       .populate("items.producto")
       .sort({ createdAt: -1 });
@@ -94,18 +94,19 @@ exports.transferenciasEntrantes = async (req, res) => {
   }
 };
 
-
 // ==============================
-// Transferencias ENVIADAS
+// Transferencias enviadas
 // ==============================
 exports.transferenciasEnviadas = async (req, res) => {
   try {
     const esAdmin = req.usuario.role === "admin";
 
-    // Filtro: admin ve todo, usuario normal solo su sucursal origen
     const filtro = esAdmin
       ? {}
-      : { sucursalOrigen: req.usuario.sucursal._id || req.usuario.sucursal };
+      : {
+          sucursalOrigen:
+            req.usuario.sucursal._id || req.usuario.sucursal,
+        };
 
     const data = await Transferencia.find(filtro)
       .populate("sucursalDestino")
@@ -124,37 +125,50 @@ exports.transferenciasEnviadas = async (req, res) => {
 // ==============================
 exports.aceptarTransferencia = async (req, res) => {
   try {
-    const transferencia = await Transferencia.findById(req.params.id);
+    const transferencia = await Transferencia.findById(
+      req.params.id
+    );
 
     if (!transferencia || transferencia.estado !== "pendiente") {
-      return res.status(404).json({ error: "Transferencia no válida" });
+      return res
+        .status(404)
+        .json({ error: "Transferencia inválida" });
     }
 
     const esAdmin = req.usuario.role === "admin";
+
     const sucursalUsuario = esAdmin
       ? null
       : req.usuario.sucursal._id || req.usuario.sucursal;
 
-    if (!esAdmin && String(transferencia.sucursalDestino) !== String(sucursalUsuario)) {
+    if (
+      !esAdmin &&
+      String(transferencia.sucursalDestino) !==
+        String(sucursalUsuario)
+    ) {
       return res.status(403).json({ error: "No autorizado" });
     }
 
     for (const item of transferencia.items) {
+      // ORIGEN
       const origen = await Inventario.findOne({
         producto: item.producto,
-        sucursal: transferencia.sucursalOrigen
+        sucursal: transferencia.sucursalOrigen,
       });
 
       if (!origen || origen.cantidad < item.cantidad) {
-        return res.status(400).json({ error: "Inventario insuficiente en origen" });
+        return res
+          .status(400)
+          .json({ error: "Stock insuficiente" });
       }
 
       origen.cantidad -= item.cantidad;
       await origen.save();
 
+      // DESTINO
       let destino = await Inventario.findOne({
         producto: item.producto,
-        sucursal: transferencia.sucursalDestino
+        sucursal: transferencia.sucursalDestino,
       });
 
       if (destino) {
@@ -164,28 +178,33 @@ exports.aceptarTransferencia = async (req, res) => {
         await Inventario.create({
           producto: item.producto,
           sucursal: transferencia.sucursalDestino,
-          cantidad: item.cantidad
+          cantidad: item.cantidad,
         });
       }
 
-      // MOVIMIENTO
-      await Movimiento.create({
-        tipo: "transferencia",
-        producto: item.producto,
-        cantidad: item.cantidad,
-        sucursalOrigen: transferencia.sucursalOrigen,
-        sucursalDestino: transferencia.sucursalDestino,
-        usuario: transferencia.usuarioOrigen,
-        usuarioAcepta: req.usuario._id
-      });
+      // 👉 SOLO USUARIOS REGISTRAN MOVIMIENTO AQUÍ
+      if (!esAdmin) {
+        await Movimiento.create({
+          tipo: "transferencia",
+          producto: item.producto,
+          cantidad: item.cantidad,
+          sucursalOrigen: transferencia.sucursalOrigen,
+          sucursalDestino: transferencia.sucursalDestino,
+          usuario: transferencia.usuarioOrigen,
+          usuarioAcepta: req.usuario._id,
+        });
+      }
     }
 
     transferencia.estado = "aceptada";
     transferencia.usuarioDestino = req.usuario._id;
     transferencia.fechaRespuesta = new Date();
+
     await transferencia.save();
 
-    res.json({ mensaje: "Transferencia aceptada correctamente" });
+    res.json({
+      mensaje: "Transferencia aceptada",
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -196,24 +215,34 @@ exports.aceptarTransferencia = async (req, res) => {
 // ==============================
 exports.rechazarTransferencia = async (req, res) => {
   try {
-    const transferencia = await Transferencia.findById(req.params.id);
+    const transferencia = await Transferencia.findById(
+      req.params.id
+    );
 
     if (!transferencia || transferencia.estado !== "pendiente") {
-      return res.status(404).json({ error: "Transferencia no válida" });
+      return res
+        .status(404)
+        .json({ error: "Transferencia inválida" });
     }
 
     const esAdmin = req.usuario.role === "admin";
+
     const sucursalUsuario = esAdmin
       ? null
       : req.usuario.sucursal._id || req.usuario.sucursal;
 
-    if (!esAdmin && String(transferencia.sucursalDestino) !== String(sucursalUsuario)) {
+    if (
+      !esAdmin &&
+      String(transferencia.sucursalDestino) !==
+        String(sucursalUsuario)
+    ) {
       return res.status(403).json({ error: "No autorizado" });
     }
 
     transferencia.estado = "rechazada";
     transferencia.usuarioDestino = req.usuario._id;
     transferencia.fechaRespuesta = new Date();
+
     await transferencia.save();
 
     res.json({ mensaje: "Transferencia rechazada" });

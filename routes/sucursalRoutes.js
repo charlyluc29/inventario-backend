@@ -3,6 +3,13 @@ const router = express.Router();
 const controller = require("../controllers/sucursalController");
 const { verificarToken } = require("../middlewares/authMiddleware");
 
+// 🔥 ESTA VA PRIMERO
+router.get(
+  "/mantenimiento",
+  verificarToken,
+  controller.obtenerSucursalMantenimiento
+);
+
 router.post("/", verificarToken, controller.crearSucursal);
 router.get("/", verificarToken, controller.obtenerSucursales);
 router.get("/:id", verificarToken, controller.obtenerSucursal);

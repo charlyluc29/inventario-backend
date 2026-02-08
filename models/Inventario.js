@@ -1,26 +1,38 @@
-const mongoose = require("mongoose");
+const mongoose = require("mongoose")
 
 const inventarioSchema = new mongoose.Schema(
   {
-    producto: { 
-      type: mongoose.Schema.Types.ObjectId, // <-- ObjectId
-      ref: "Producto", 
-      required: true 
+    producto: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Producto",
+      required: true
     },
-    sucursal: { 
-      type: mongoose.Schema.Types.ObjectId, 
-      ref: "Sucursal", 
-      required: true 
+
+    sucursal: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Sucursal",
+      required: true
     },
-    cantidad: { 
-      type: Number, 
-      required: true, 
-      min: [0, "La cantidad no puede ser negativa"] 
+
+    cantidad: {
+      type: Number,
+      required: true,
+      min: 0
+    },
+
+    // 🔧 NUEVO
+    estadoReparacion: {
+      type: String,
+      enum: ["pendiente", "reparado"],
+      default: "pendiente"
     }
   },
   { timestamps: true }
-);
+)
 
-inventarioSchema.index({ producto: 1, sucursal: 1 }, { unique: true });
+inventarioSchema.index(
+  { producto: 1, sucursal: 1 },
+  { unique: true }
+)
 
-module.exports = mongoose.model("Inventario", inventarioSchema);
+module.exports = mongoose.model("Inventario", inventarioSchema)

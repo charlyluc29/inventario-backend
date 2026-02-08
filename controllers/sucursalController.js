@@ -30,3 +30,23 @@ exports.eliminarSucursal = async (req, res) => {
   await Sucursal.findByIdAndDelete(req.params.id);
   res.json({ mensaje: "Sucursal eliminada" });
 };
+// ==============================
+// Obtener sucursal de mantenimiento
+// ==============================
+exports.obtenerSucursalMantenimiento = async (req, res) => {
+  try {
+    const sucursal = await Sucursal.findOne({ tipo: "mantenimiento" });
+
+    if (!sucursal) {
+      return res
+        .status(404)
+        .json({ error: "Sucursal de mantenimiento no existe" });
+    }
+
+    res.json(sucursal);
+  } catch (err) {
+    console.error("Error obteniendo mantenimiento:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+

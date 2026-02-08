@@ -10,7 +10,7 @@ const movimientoRoutes = require("./routes/movimientosRoutes");
 const usuarioRoutes = require("./routes/usuarioRoutes");
 const authRoutes = require("./routes/authRoutes");
 const transferenciaRoutes = require("./routes/transferenciaRoutes");
-
+const mantenimientoRoutes = require("./routes/mantenimientoRoutes");
 const app = express();
 
 // =======================
@@ -44,6 +44,7 @@ app.use("/api/inventario", inventarioRoutes);
 app.use("/api/movimientos", movimientoRoutes);
 app.use("/api/usuarios", usuarioRoutes);
 app.use("/api/transferencias", transferenciaRoutes);
+app.use("/api/mantenimiento", mantenimientoRoutes);
 
 // =======================
 // Ruta raíz (health check)

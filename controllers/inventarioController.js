@@ -1,32 +1,37 @@
-const mongoose = require("mongoose");
-const Inventario = require("../models/Inventario");
-const Producto = require("../models/Producto");
-const Movimiento = require("../models/Movimiento");
-const Sucursal = require("../models/Sucursal");
+const mongoose = require("mongoose")
+
+const Inventario = require("../models/Inventario")
+const Producto = require("../models/Producto")
+const Movimiento = require("../models/Movimiento")
+const Sucursal = require("../models/Sucursal")
 
 // ==============================
 // Inventario por sucursal
 // ==============================
 exports.obtenerInventarioPorSucursal = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { id } = req.params
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ error: "ID de sucursal inválido" });
+      return res.status(400).json({
+        error: "ID de sucursal inválido"
+      })
     }
 
     let inventario = await Inventario.find({ sucursal: id })
       .populate("producto")
       .populate("sucursal")
-      .lean();
+      .lean()
 
-    inventario = inventario.filter(i => i.producto && i.sucursal);
+    inventario = inventario.filter(i => i.producto && i.sucursal)
 
-    res.json(inventario);
+    res.json(inventario)
+
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err)
+    res.status(500).json({ error: err.message })
   }
-};
+}
 
 // ==============================
 // Inventario general
@@ -36,159 +41,209 @@ exports.obtenerInventarioGeneral = async (req, res) => {
     let inventario = await Inventario.find()
       .populate("producto")
       .populate("sucursal")
-      .lean();
+      .lean()
 
-    inventario = inventario.filter(i => i.producto && i.sucursal);
+    inventario = inventario.filter(i => i.producto && i.sucursal)
 
-    res.json(inventario);
+    res.json(inventario)
+
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err)
+    res.status(500).json({ error: err.message })
   }
-};
+}
 
 // ==============================
-// Eliminar inventario (solo sucursal)
+// Eliminar inventario (SIN HISTORIAL)
 // ==============================
 exports.eliminarInventario = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { id } = req.params
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ error: "ID de inventario inválido" });
+      return res.status(400).json({
+        error: "ID de inventario inválido"
+      })
     }
 
-    const inventario = await Inventario.findById(id);
+    const inventario = await Inventario.findById(id)
 
     if (!inventario) {
       return res.status(404).json({
-        error: "Registro de inventario no encontrado"
-      });
+        error: "Registro no encontrado"
+      })
     }
 
-    await inventario.deleteOne();
+    // 🔥 BORRAR MOVIMIENTOS RELACIONADOS
+    await Movimiento.deleteMany({
+      producto: inventario.producto,
+      $or: [
+        { sucursalOrigen: inventario.sucursal },
+        { sucursalDestino: inventario.sucursal }
+      ]
+    })
+
+    // 🔥 BORRAR INVENTARIO
+    await Inventario.findByIdAndDelete(id)
 
     res.json({
-      mensaje: "Producto eliminado únicamente de esta sucursal"
-    });
+      mensaje: "Producto eliminado sin generar historial"
+    })
+
   } catch (err) {
-    console.error("Error eliminar inventario:", err);
-    res.status(500).json({ error: err.message });
+    console.error("Error eliminar inventario:", err)
+    res.status(500).json({ error: err.message })
   }
-};
+}
 
 // ==============================
-// Entrada de inventario (ADMIN)
+// Entrada (ADMIN)
 // ==============================
 exports.agregarInventario = async (req, res) => {
   try {
-    const { sucursal, producto, cantidad } = req.body;
+    const { sucursal, producto, cantidad } = req.body
 
     if (!mongoose.Types.ObjectId.isValid(sucursal))
-      return res.status(400).json({ error: "Sucursal inválida" });
+      return res.status(400).json({ error: "Sucursal inválida" })
 
     if (!mongoose.Types.ObjectId.isValid(producto))
-      return res.status(400).json({ error: "Producto inválido" });
+      return res.status(400).json({ error: "Producto inválido" })
 
     if (!cantidad || cantidad <= 0)
-      return res.status(400).json({ error: "Cantidad inválida" });
+      return res.status(400).json({ error: "Cantidad inválida" })
 
-    let registro = await Inventario.findOne({ sucursal, producto });
+    const sucursalDB = await Sucursal.findById(sucursal)
+
+    if (!sucursalDB)
+      return res.status(404).json({ error: "Sucursal no encontrada" })
+
+    if (sucursalDB.tipo === "mantenimiento") {
+      return res.status(403).json({
+        error: "No se permiten entradas en mantenimiento"
+      })
+    }
+
+    let registro = await Inventario.findOne({ sucursal, producto })
 
     if (registro) {
-      registro.cantidad += cantidad;
-      await registro.save();
+      registro.cantidad += cantidad
+      await registro.save()
     } else {
-      registro = await Inventario.create({ sucursal, producto, cantidad });
+      registro = await Inventario.create({
+        sucursal,
+        producto,
+        cantidad
+      })
     }
 
     await Movimiento.create({
       tipo: "entrada",
       producto,
       cantidad,
-      sucursalOrigen: null,
       sucursalDestino: sucursal,
       usuario: req.usuario?.id || null
-    });
+    })
 
-    res.json({ mensaje: "Entrada registrada", registro });
+    res.json({
+      mensaje: "Entrada registrada",
+      registro
+    })
+
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err)
+    res.status(500).json({ error: err.message })
   }
-};
+}
 
 // ==============================
-// Salida de inventario (ADMIN)
+// Salida (ADMIN)
 // ==============================
 exports.salidaInventario = async (req, res) => {
   try {
-    const { sucursal, producto, cantidad } = req.body;
+    const { sucursal, producto, cantidad } = req.body
 
-    const registro = await Inventario.findOne({ sucursal, producto });
+    const registro = await Inventario.findOne({
+      sucursal,
+      producto
+    })
 
     if (!registro || registro.cantidad < cantidad) {
-      return res.status(400).json({ error: "Inventario insuficiente" });
+      return res.status(400).json({
+        error: "Inventario insuficiente"
+      })
     }
 
-    registro.cantidad -= cantidad;
-    await registro.save();
+    registro.cantidad -= cantidad
+    await registro.save()
 
     await Movimiento.create({
       tipo: "salida",
       producto,
       cantidad,
       sucursalOrigen: sucursal,
-      sucursalDestino: null,
       usuario: req.usuario?.id || null
-    });
+    })
 
-    res.json({ mensaje: "Salida registrada", registro });
+    res.json({
+      mensaje: "Salida registrada",
+      registro
+    })
+
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err)
+    res.status(500).json({ error: err.message })
   }
-};
+}
 
 // ==============================
 // Transferencia individual
 // ==============================
 exports.transferirProducto = async (req, res) => {
   try {
-    const { producto, sucursalOrigen, sucursalDestino, cantidad } = req.body;
+    const {
+      producto,
+      sucursalOrigen,
+      sucursalDestino,
+      cantidad
+    } = req.body
 
     if (
       req.usuario.role === "user" &&
       req.usuario.sucursal.toString() !== sucursalOrigen.toString()
     ) {
       return res.status(403).json({
-        error: "No puedes transferir desde otra sucursal"
-      });
+        error: "No autorizado"
+      })
     }
 
     const origen = await Inventario.findOne({
       producto,
       sucursal: sucursalOrigen
-    });
+    })
 
     if (!origen || origen.cantidad < cantidad) {
-      return res.status(400).json({ error: "Inventario insuficiente" });
+      return res.status(400).json({
+        error: "Inventario insuficiente"
+      })
     }
 
-    origen.cantidad -= cantidad;
-    await origen.save();
+    origen.cantidad -= cantidad
+    await origen.save()
 
     let destino = await Inventario.findOne({
       producto,
       sucursal: sucursalDestino
-    });
+    })
 
     if (destino) {
-      destino.cantidad += cantidad;
-      await destino.save();
+      destino.cantidad += cantidad
+      await destino.save()
     } else {
       destino = await Inventario.create({
         producto,
         sucursal: sucursalDestino,
         cantidad
-      });
+      })
     }
 
     await Movimiento.create({
@@ -198,52 +253,58 @@ exports.transferirProducto = async (req, res) => {
       sucursalOrigen,
       sucursalDestino,
       usuario: req.usuario.id
-    });
+    })
 
-    res.json({ mensaje: "Transferencia realizada", origen, destino });
+    res.json({
+      mensaje: "Transferencia realizada",
+      origen,
+      destino
+    })
+
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err)
+    res.status(500).json({ error: err.message })
   }
-};
+}
 
 // ==============================
-// Transferencia por lote
+// Transferencia lote
 // ==============================
 exports.transferirProductosLote = async (req, res) => {
   try {
-    const { items, sucursalOrigen, sucursalDestino } = req.body;
+    const { items, sucursalOrigen, sucursalDestino } = req.body
 
     for (const item of items) {
-      const { producto, cantidad } = item;
+      const { producto, cantidad } = item
 
       const origen = await Inventario.findOne({
         producto,
         sucursal: sucursalOrigen
-      });
+      })
 
       if (!origen || origen.cantidad < cantidad) {
         return res.status(400).json({
-          error: "Inventario insuficiente para uno de los productos"
-        });
+          error: "Inventario insuficiente"
+        })
       }
 
-      origen.cantidad -= cantidad;
-      await origen.save();
+      origen.cantidad -= cantidad
+      await origen.save()
 
       let destino = await Inventario.findOne({
         producto,
         sucursal: sucursalDestino
-      });
+      })
 
       if (destino) {
-        destino.cantidad += cantidad;
-        await destino.save();
+        destino.cantidad += cantidad
+        await destino.save()
       } else {
         await Inventario.create({
           producto,
           sucursal: sucursalDestino,
           cantidad
-        });
+        })
       }
 
       await Movimiento.create({
@@ -253,17 +314,21 @@ exports.transferirProductosLote = async (req, res) => {
         sucursalOrigen,
         sucursalDestino,
         usuario: req.usuario.id
-      });
+      })
     }
 
-    res.json({ mensaje: "Transferencia por lote completada" });
+    res.json({
+      mensaje: "Transferencia por lote completada"
+    })
+
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err)
+    res.status(500).json({ error: err.message })
   }
-};
+}
 
 // ==============================
-// Crear producto + inventario (SOLO ADMIN)
+// Crear producto + inventario
 // ==============================
 exports.crearProductoConInventario = async (req, res) => {
   try {
@@ -276,9 +341,8 @@ exports.crearProductoConInventario = async (req, res) => {
       precio,
       sucursal,
       cantidad
-    } = req.body;
+    } = req.body
 
-    // Validación básica
     if (
       !codigo ||
       !nombre ||
@@ -290,11 +354,23 @@ exports.crearProductoConInventario = async (req, res) => {
       !cantidad
     ) {
       return res.status(400).json({
-        error: "Faltan campos obligatorios"
-      });
+        error: "Faltan campos"
+      })
     }
 
-    // Crear producto
+    const sucursalDB = await Sucursal.findById(sucursal)
+
+    if (!sucursalDB)
+      return res.status(404).json({
+        error: "Sucursal no encontrada"
+      })
+
+    if (sucursalDB.tipo === "mantenimiento") {
+      return res.status(403).json({
+        error: "Sucursal en mantenimiento"
+      })
+    }
+
     const producto = await Producto.create({
       codigo,
       nombre,
@@ -302,35 +378,33 @@ exports.crearProductoConInventario = async (req, res) => {
       modelo,
       estado,
       precio
-    });
+    })
 
-    // Crear inventario
     const inventario = await Inventario.create({
       producto: producto._id,
       sucursal,
       cantidad
-    });
+    })
 
-    // Movimiento
     await Movimiento.create({
       tipo: "entrada",
       producto: producto._id,
       cantidad,
       sucursalDestino: sucursal,
       usuario: req.usuario.id
-    });
+    })
 
     res.status(201).json({
-      mensaje: "Producto creado e inventario registrado",
+      mensaje: "Producto creado",
       producto,
       inventario
-    });
+    })
 
   } catch (err) {
-    console.error("Error crearProductoConInventario:", err);
-    res.status(500).json({ error: err.message });
+    console.error(err)
+    res.status(500).json({ error: err.message })
   }
-};
+}
 
 // ==============================
 // Movimientos
@@ -343,12 +417,14 @@ exports.obtenerMovimientos = async (req, res) => {
       .populate("sucursalDestino")
       .populate("usuario", "username")
       .populate("usuarioAcepta", "username")
-      .lean();
+      .lean()
 
-    movimientos = movimientos.filter(m => m.producto);
+    movimientos = movimientos.filter(m => m.producto)
 
-    res.json(movimientos);
+    res.json(movimientos)
+
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err)
+    res.status(500).json({ error: err.message })
   }
-};
+}

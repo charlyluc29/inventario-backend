@@ -1,32 +1,27 @@
-// controllers/movimientoController.js
 const Movimiento = require("../models/Movimiento");
-const Producto = require("../models/Producto");
-const Sucursal = require("../models/Sucursal");
 
-// Obtener todos los movimientos
+// ==============================
+// Todos los movimientos
+// ==============================
 exports.obtenerMovimientos = async (req, res) => {
   try {
     const movimientos = await Movimiento.find()
+      .populate("producto")
       .populate("sucursalOrigen")
-      .populate("sucursalDestino");
+      .populate("sucursalDestino")
+      .populate("usuario", "username role")
+      .populate("usuarioAcepta", "username role")
+      .sort({ createdAt: -1 });
 
-    const movimientosConProductos = await Promise.all(
-      movimientos.map(async (mov) => {
-        const productoInfo = await Producto.findOne({ _id: mov.producto });
-        return {
-          ...mov.toObject(),
-          producto: productoInfo || null
-        };
-      })
-    );
-
-    res.json(movimientosConProductos);
+    res.json(movimientos);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-// Obtener movimientos por sucursal
+// ==============================
+// Movimientos por sucursal
+// ==============================
 exports.obtenerMovimientosPorSucursal = async (req, res) => {
   try {
     const movimientos = await Movimiento.find({
@@ -35,29 +30,31 @@ exports.obtenerMovimientosPorSucursal = async (req, res) => {
         { sucursalDestino: req.params.id },
       ],
     })
+      .populate("producto")
       .populate("sucursalOrigen")
-      .populate("sucursalDestino");
+      .populate("sucursalDestino")
+      .populate("usuario", "username role")
+      .populate("usuarioAcepta", "username role")
+      .sort({ createdAt: -1 });
 
-    const movimientosConProductos = await Promise.all(
-      movimientos.map(async (mov) => {
-        const productoInfo = await Producto.findOne({ _id: mov.producto });
-        return {
-          ...mov.toObject(),
-          producto: productoInfo || null
-        };
-      })
-    );
-
-    res.json(movimientosConProductos);
+    res.json(movimientos);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-// Crear un movimiento manualmente
+// ==============================
+// Crear movimiento manual
+// ==============================
 exports.crearMovimiento = async (req, res) => {
   try {
-    const { producto, sucursalOrigen, sucursalDestino, cantidad, tipo } = req.body;
+    const {
+      producto,
+      sucursalOrigen,
+      sucursalDestino,
+      cantidad,
+      tipo,
+    } = req.body;
 
     const movimiento = await Movimiento.create({
       producto,
@@ -65,26 +62,24 @@ exports.crearMovimiento = async (req, res) => {
       sucursalDestino: sucursalDestino || null,
       cantidad,
       tipo,
+      usuario: req.usuario._id,
     });
 
-    const productoInfo = await Producto.findOne({ _id: producto });
-
-    res.json({
-      ...movimiento.toObject(),
-      producto: productoInfo || null
-    });
+    res.json(movimiento);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
+// ==============================
 // Eliminar movimiento
+// ==============================
 exports.eliminarMovimiento = async (req, res) => {
   try {
     await Movimiento.findByIdAndDelete(req.params.id);
+
     res.json({ mensaje: "Movimiento eliminado" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
-

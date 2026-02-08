@@ -1,11 +1,14 @@
-const express = require("express");
-const router = express.Router();
+const express = require("express")
+const router = express.Router()
 
-const inventarioController = require("../controllers/inventarioController");
-const { verificarToken, soloAdmin } = require("../middlewares/authMiddleware");
+const inventarioController = require("../controllers/inventarioController")
+const {
+  verificarToken,
+  soloAdmin
+} = require("../middlewares/authMiddleware")
 
 // ==============================
-// CONSULTAS (ORDEN CRÍTICO)
+// CONSULTAS (ORDEN IMPORTANTE)
 // ==============================
 
 // Inventario general
@@ -13,30 +16,35 @@ router.get(
   "/",
   verificarToken,
   inventarioController.obtenerInventarioGeneral
-);
+)
 
-// Movimientos (ANTES de /:id)
+// Movimientos (ANTES de rutas dinámicas)
 router.get(
   "/movimientos/all",
   verificarToken,
   inventarioController.obtenerMovimientos
-);
+)
 
-// Eliminar producto SOLO de una sucursal (inventario)
+// ==============================
+// ELIMINAR INVENTARIO (SIN HISTORIAL)
+// ==============================
+// ⚠️ Borra un producto de una sucursal SIN generar movimiento
+// SOLO ADMIN
 router.delete(
   "/item/:id",
   verificarToken,
   soloAdmin,
   inventarioController.eliminarInventario
-);
+)
 
-
-// Inventario por sucursal
+// ==============================
+// INVENTARIO POR SUCURSAL
+// ==============================
 router.get(
   "/:id",
   verificarToken,
   inventarioController.obtenerInventarioPorSucursal
-);
+)
 
 // ==============================
 // OPERACIONES
@@ -48,7 +56,7 @@ router.post(
   verificarToken,
   soloAdmin,
   inventarioController.agregarInventario
-);
+)
 
 // Salida (SOLO ADMIN)
 router.post(
@@ -56,25 +64,31 @@ router.post(
   verificarToken,
   soloAdmin,
   inventarioController.salidaInventario
-);
+)
+
+// ==============================
+// TRANSFERENCIAS
+// ==============================
 
 // Transferencia individual
 // ✅ Admin: cualquier sucursal
-// ✅ User: SOLO su sucursal (validado en controller)
+// ✅ User: SOLO su sucursal
 router.post(
   "/transferir",
   verificarToken,
   inventarioController.transferirProducto
-);
+)
 
 // Transferencia múltiple (LOTE)
-// ✅ Admin: cualquier sucursal
-// ✅ User: SOLO su sucursal (validado en controller)
 router.post(
   "/transferir-lote",
   verificarToken,
   inventarioController.transferirProductosLote
-);
+)
+
+// ==============================
+// CREAR PRODUCTO
+// ==============================
 
 // Crear producto + inventario (SOLO ADMIN)
 router.post(
@@ -82,6 +96,6 @@ router.post(
   verificarToken,
   soloAdmin,
   inventarioController.crearProductoConInventario
-);
+)
 
-module.exports = router;
+module.exports = router

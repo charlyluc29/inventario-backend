@@ -1,8 +1,27 @@
-const mongoose = require("mongoose");
+const mongoose = require("mongoose")
 
-const sucursalSchema = new mongoose.Schema({
-  nombre: { type: String, required: true },
-  direccion: String
-});
+const sucursalSchema = new mongoose.Schema(
+  {
+    nombre: {
+      type: String,
+      required: true,
+      trim: true
+    },
 
-module.exports = mongoose.model("Sucursal", sucursalSchema);
+    direccion: {
+      type: String,
+      trim: true
+    },
+
+    tipo: {
+      type: String,
+      enum: ["normal", "mantenimiento"],
+      default: "normal"
+    }
+  },
+  {
+    timestamps: true
+  }
+)
+
+module.exports = mongoose.model("Sucursal", sucursalSchema)
